@@ -1,0 +1,10 @@
+#
+# UEFI shim build configuration
+#
+
+# enable booting the kernel+initramfs+cmdline efi image directly
+DISABLE_EBS_PROTECTION = y
+
+# our certificate package in esl format
+VENDOR_DB_FILE = /shim/vendor_db.esl
+

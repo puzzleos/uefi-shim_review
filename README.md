@@ -21,36 +21,43 @@ Here's the template:
 -------------------------------------------------------------------------------
 What organization or people are asking to have this signed:
 -------------------------------------------------------------------------------
-[your text here]
+
+> Cisco Systems, Inc.
 
 -------------------------------------------------------------------------------
 What product or service is this for:
 -------------------------------------------------------------------------------
-[your text here]
+
+> PuzzleOS, a Linux based appliance OS used in a number of Cisco products.
 
 -------------------------------------------------------------------------------
 What's the justification that this really does need to be signed for the whole 
 world to be able to boot it:
 -------------------------------------------------------------------------------
-[your text here]
+
+> PuzzleOS is designed to run on any platform that supports UEFI Secure Boot
+and the easiest way to support the largest number of systems is to have a shim
+bootloader signed by Microsoft.
 
 -------------------------------------------------------------------------------
 Who is the primary contact for security updates, etc.
 -------------------------------------------------------------------------------
-- Name:
-- Position:
-- Email address:
-- PGP key, signed by the other security contacts, and preferably also with
+> - Name: Paul Moore
+> - Position: Engineering Technical Leader, Cisco
+> - Email address: pmoore2@cisco.com, paul@paul-moore.com
+> - PGP key, signed by the other security contacts, and preferably also with
   signatures that are reasonably well known in the Linux community:
+> 7100AADFAE6E6E940D2E0AD655E45A5AE8CA7C8A
 
 -------------------------------------------------------------------------------
 Who is the secondary contact for security updates, etc.
 -------------------------------------------------------------------------------
-- Name:
-- Position:
-- Email address:
-- PGP key, signed by the other security contacts, and preferably also with
+> - Name: Serge Hallyn
+> - Position: Principal Engineer, Cisco
+> - Email address: shallyn@cisco.com, sergeh@kernel.org
+> - PGP key, signed by the other security contacts, and preferably also with
   signatures that are reasonably well known in the Linux community:
+> 66D0387DB85D320F8408166DB175CFA98F192AF2
 
 -------------------------------------------------------------------------------
 Please create your shim binaries starting with the 15.4 shim release tar file:
@@ -58,17 +65,197 @@ https://github.com/rhboot/shim/releases/download/15.4/shim-15.4.tar.bz2
 This matches https://github.com/rhboot/shim/releases/tag/15.4 and contains
 the appropriate gnu-efi source.
 -------------------------------------------------------------------------------
-[Please confirm]
+
+> We built our production shim using the same Dockerfile we are including in
+our review submission.  The Dockerfile should be self documenting regarding the
+base source tree and additional patches, but all of the sources involved in
+our shim submission are either part of the 'shim-15.4' branch, the default
+branch, or exiting GitHub PRs.  All of the patches we selected were based on
+guidance from upstream as well as the Fedora submission from April 2021.
 
 -------------------------------------------------------------------------------
 URL for a repo that contains the exact code which was built to get this binary:
 -------------------------------------------------------------------------------
-[your url here]
+
+> As the base source tree and additional patches can be found in the upstream
+repository or PRs we did not create our own repository, we generate the build
+branch in the Dockerfile using the signed '15.4' tag as a base.
 
 -------------------------------------------------------------------------------
 What patches are being applied and why:
 -------------------------------------------------------------------------------
-[your text here]
+
+> With respect to the patches we included in our submission we followed
+upstream guidance and the Fedora April 2021 submission.  There are nine patches
+in total applied on top of the '15.4' tag, the first five have already been
+merged into other shim branches with the remaining four coming from PR #365,
+PR #378, and PR #381.  The commit descriptions for each patch are shown below:
+
+```
+commit 16eeafe28c552bca36953d75581500887631a7f1
+Author: Peter Jones <pjones@redhat.com>
+Date:   Wed Mar 31 09:44:53 2021 -0400
+
+    shim-15.4 branch: update .gitmodules to point at shim-15.4 in gnu-efi
+
+    This is purely superficial, as the commit points at the shim-15.4 branch
+    already, but some people have found it confusing.
+
+    This fixes issue #356.
+
+    Signed-off-by: Peter Jones <pjones@redhat.com>
+```
+
+```
+commit 822d07ad4f07ef66fe447a130e1027c88d02a394
+Author: Adam Williamson <awilliam@redhat.com>
+Date:   Thu Apr 8 22:39:02 2021 -0700
+
+    Fix handling of ignore_db and user_insecure_mode
+
+    In 65be350308783a8ef537246c8ad0545b4e6ad069, import_mok_state() is split
+    up into a function that manages the whole mok state, and one that
+    handles the state machine for an individual state variable.
+    Unfortunately, the code that initializes the global ignore_db and
+    user_insecure_mode was copied from import_mok_state() into the new
+    import_one_mok_state() function, and thus re-initializes that state each
+    time it processes a MoK state variable, before even assessing if that
+    variable is set.  As a result, we never honor either flag, and the
+    machine owner cannot disable trusting the system firmware's db/dbx
+    databases or disable validation altogether.
+
+    This patch removes the extra re-initialization, allowing those variables
+    to be set properly.
+
+    Signed-off-by: Adam Williamson <awilliam@redhat.com>
+```
+
+```
+commit 5b3ca0d2f7b5f425ba1a14db8ce98b8d95a2f89f
+Author: Peter Jones <pjones@redhat.com>
+Date:   Wed Mar 31 14:54:52 2021 -0400
+
+    Fix a broken file header on ia32
+
+    Commit c6281c6a195edee61185 needs to have included a ". = ALIGN(4096)"
+    directive before .reloc, but fails to do so.
+
+    As a result, binutils, which does not care about the actual binary
+    format's constraints in any way, does not enforce the section alignment,
+    and it will not load.
+
+    Signed-off-by: Peter Jones <pjones@redhat.com>
+```
+
+```
+commit 4068fd42c891ea6ebdec056f461babc6e4048844
+Author: Gary Lin <glin@suse.com>
+Date:   Thu Apr 8 16:23:03 2021 +0800
+
+    mok: allocate MOK config table as BootServicesData
+
+    Linux kernel is picky when reserving the memory for x86 and it only
+    expects BootServicesData:
+
+    https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/platform/efi/quirks.c?h=v5.11#n254
+
+    Otherwise, the following error would show during system boot:
+
+    Apr 07 12:31:56.743925 localhost kernel: efi: Failed to lookup EFI memory descriptor for 0x000000003dcf8000
+
+    Although BootServicesData would be reclaimed after ExitBootService(),
+    linux kernel reserves MOK config table when it detects the existence of
+    the table, so it's fine to allocate the table as BootServicesData.
+
+    Signed-off-by: Gary Lin <glin@suse.com>
+```
+
+```
+commit 493bd940e5c6e28e673034687de7adef9529efff
+Author: Peter Jones <pjones@redhat.com>
+Date:   Sat Apr 10 16:05:23 2021 -0400
+
+    Don't call QueryVariableInfo() on EFI 1.10 machines
+    
+    The EFI 1.10 spec (and presumably earlier revisions as well) didn't have
+    RT->QueryVariableInfo(), and on Chris Murphy's MacBookPro8,2 , that
+    memory appears to be initialized randomly.
+    
+    This patch changes it to not call RT->QueryVariableInfo() if the
+    EFI_RUNTIME_SERVICES table's major revision is less than two, and
+    assumes our maximum variable size is 1024 in that case.
+    
+    Signed-off-by: Peter Jones <pjones@redhat.com>
+```
+
+```
+commit 764021ad8e01f5f5122612059ba5d8ab10ff6a3b
+Author: Jonathan Yong <jonathan.yong@intel.com>
+Date:   Fri Apr 16 09:59:03 2021 +0800
+
+    mok: fix potential buffer overrun in import_mok_state
+    
+    Fix the case where data_size is 0, so config_template is
+    not implicitly copied like the size calculation above.
+    
+    upstream-status: https://github.com/rhboot/shim/issues/249
+    
+    Signed-off-by: Jonathan Yong <jonathan.yong@intel.com>
+```
+
+```
+commit c5928d5ca0ab29809540f930149702717a942a7d
+Author: Seth Forshee <seth.forshee@canonical.com>
+Date:   Sat Jun 5 07:34:44 2021 -0500
+
+    Don't unhook ExitBootServices() when EBS protection is disabled
+    
+    When EBS protection is disabled the code which hooks into EBS is
+    complied out, but on unhook it's the code which restores Exit() that
+    is disabled. This appears to be a mistake, and it can result in
+    writing NULL to EBS in the boot services table.
+    
+    Fix this by moving the ifdefs to compile out the code to unhook EBS
+    instead of the code to unhook Exit(). Also ifdef the definition of
+    system_exit_boot_services to safeguard against its accidental use.
+    
+    Fixes: 4b0a61dc9a95 ("shim: compile time option to bypass the ExitBootServices() check")
+    Signed-off-by: Seth Forshee <seth.forshee@canonical.com>
+```
+
+```
+commit cc95420a48bfab3c0535580a91ebe3dc35255dd1 (refs/patches/gh-pr-12/shim-loadoptions_parse_fix)
+Author: Paul Moore <pmoore2@cisco.com>
+Date:   Tue May 18 11:55:27 2021 -0400
+
+    shim: fix a regression in set_second_stage()'s LoadOptions parsing
+    
+    Commit 9e8dde5438ec ("Fix a plausible NULL dereference.") attempted
+    to fix a potential NULL pointer dereference but in doing so it
+    removed a loop which was necessary to determine the size of the
+    second stage loader supplied as an argument to shim.  This breaks
+    argument parsing in QEMU+OVMF as well as on various physical systems.
+    
+    This patch attempts to fix this by determining the length of the
+    second stage loader, and any remaining options, while parsing the
+    shim command line.
+    
+    Fixes: 9e8dde5438ec ("Fix a plausible NULL dereference.")
+    Signed-off-by: Paul Moore <pmoore2@cisco.com>
+```
+
+```
+commit fed27210d1203e8fee150aeaf05662724af1e7a4
+Author: Paul Moore <pmoore2@cisco.com>
+Date:   Tue May 18 15:02:28 2021 -0400
+
+    shim: handle single UCS-2 string arguments
+    
+    Handle the case where we get the second stage loader as a single
+    UCS-2 string.
+    
+    Signed-off-by: Paul Moore <pmoore2@cisco.com>
+```
 
 -------------------------------------------------------------------------------
 If bootloader, shim loading is, GRUB2: is CVE-2020-14372, CVE-2020-25632,
@@ -76,15 +263,23 @@ If bootloader, shim loading is, GRUB2: is CVE-2020-14372, CVE-2020-25632,
  CVE-2020-10713, CVE-2020-14308, CVE-2020-14309, CVE-2020-14310, CVE-2020-14311,
  CVE-2020-15705, and if you are shipping the shim_lock module CVE-2021-3418
 -------------------------------------------------------------------------------
-[your text here]
 
+> We have no plans to use GRUB2 as a second stage loader.  Our intention is to
+bundle the Linux Kernel, initramfs, and kernel command line into a single EFI
+binary such that the PE/COFF signature protects all of those components.  We
+are using a small EFI stub, based on the systemd-boot stub, to do this and we
+have augmented it to add support for a SBAT section.
+>
+> The "stubby" EFI shim: https://github.com/puzzleos/stubby
 
 -------------------------------------------------------------------------------
 What exact implementation of Secureboot in GRUB2 ( if this is your bootloader )
 you have? Upstream GRUB2 shim_lock verifier or downstream RHEL/Fedora/Debian/Canonical
 like implementation ?
 -------------------------------------------------------------------------------
-[your text here]
+
+> See our answer to the question regarding GRUB2; we plan to boot the Linux
+Kernel directly using the shim.
 
 -------------------------------------------------------------------------------
 If bootloader, shim loading is, GRUB2, and previous shims were trusting affected
@@ -100,7 +295,12 @@ CVE-2020-10713, CVE-2020-14308, CVE-2020-14309, CVE-2020-14310, CVE-2020-14311,
 CVE-2020-15705, and if you were shipping the shim_lock module CVE-2021-3418
 ( July 2020 grub2 CVE list + March 2021 grub2 CVE list ) grub2 builds ?
 -------------------------------------------------------------------------------
-[your text here]
+
+> This is our first shim review submission for PuzzleOS, complete with new
+vendor certificates that have not previously signed any second stage loaders or
+EFI binaries.  Further, the shim in this submission implements SBAT boot
+enforcement to control which SBAT qualified binaries are allowed to boot.
+Booting legacy and vulnerable EFI binaries should not be a concern.
 
 -------------------------------------------------------------------------------
 If your boot chain of trust includes linux kernel, is
@@ -109,7 +309,9 @@ upstream commit 1957a85b0032a81e6482ca4aab883643b8dae06e applied ?
 Is "ACPI: configfs: Disallow loading ACPI tables when locked down"
 upstream commit 75b0cea7bf307f362057cc778efe89af4c615354 applied ?
 -------------------------------------------------------------------------------
-[your text here]
+
+> We do not currently plan to sign Linux Kernels prior to v5.10 which contains
+both of the commits mentioned above.
 
 -------------------------------------------------------------------------------
 If you use vendor_db functionality of providing multiple certificates and/or
@@ -117,7 +319,16 @@ hashes please briefly describe your certificate setup. If there are allow-listed
 hashes please provide exact binaries for which hashes are created via file
 sharing service, available in public with anonymous access for verification
 -------------------------------------------------------------------------------
-[your text here]
+
+> The shim presented here consists of three vendor certificates: a "production"
+certificte, a "management" certificate, and a "limited" certificate.  The PEM
+formatted certificates are available in the "config/certs/" directory.  No
+hashes are present in the shim's allow-list.
+>
+> The different vendor certificates, and the associated signed boot chain, are
+used in conjunction with the TPM's PCR7 and TPM Extended Authorization policies
+to control access to TPM based secrets such that only authorized OS kernels are
+allowed to access secrets stored in the TPM's NVRAM.
 
 -------------------------------------------------------------------------------
 If you are re-using a previously used (CA) certificate, you will need
@@ -126,7 +337,10 @@ in order to prevent GRUB2 from being able to chainload those older GRUB2
 binaries. If you are changing to a new (CA) certificate, this does not
 apply. Please describe your strategy.
 -------------------------------------------------------------------------------
-[your text here]
+
+> This is our first shim review submission for PuzzleOS, complete with new
+vendor certificates that have not previously signed any second stage loaders or
+EFI binaries.
 
 -------------------------------------------------------------------------------
 What OS and toolchain must we use to reproduce this build?  Include where to
@@ -137,16 +351,63 @@ versions of gcc, binutils, and gnu-efi which were used, and where to find those
 binaries.  If the shim binaries can't be reproduced using the provided
 Dockerfile, please explain why that's the case and the differences would be.
 -------------------------------------------------------------------------------
-[your text here]
+
+> The included Makefile and Dockerfile are the same as what we used to build
+our shim artifacts for review.  A new shim can be built using the `make build`
+command.
 
 -------------------------------------------------------------------------------
 Which files in this repo are the logs for your build?   This should include logs
 for creating the buildroots, applying patches, doing the build, creating the
 archives, etc.
 -------------------------------------------------------------------------------
-[your text here]
+
+> The build log and relevant shim build artifacts can be found in the
+"artifacts.YYYYMMDDHHMMSS" directory.
+```
+% cd artifacts.*
+% ls -1
+build.log
+fbx64.efi
+mmx64.efi
+shim-git_commit_extra.log
+shimx64.efi
+vendor_db.esl
+% sha256sum *
+66146056bfe3252c56bc57717741ec76ebed96559754d5c71bd423429dd6aa6a  build.log
+529fc0875c8977188e026243c4a21135f27ed3906c18c83fa7503deafb5255b0  fbx64.efi
+901996120d2b0203f34511cff88f583b561972a73ce6634d3ce24c46d62dfa80  mmx64.efi
+6f8c322cf782b2c495968d62b7f32c743b5590a76f639acb551e361550ec5213  shim-git_commit_extra.log
+52cb8d4b5c9bb4a8140210de75b3bb2c9d8d72fbd78ff7f895a18e72871cbb16  shimx64.efi
+0950f70d1dce96ac227a09f4885356df2527de75891b6ca5c703a0af800bbccb  vendor_db.esl
+```
 
 -------------------------------------------------------------------------------
 Add any additional information you think we may need to validate this shim
 -------------------------------------------------------------------------------
-[your text here]
+
+> I've included an ASCII art rendering of two puzzle pieces that I thought
+looked pretty cool.
+
+```
+
+                         ____
+                        /\  __\_
+                       /  \/ \___\
+                       \     /___/
+                    /\_/     \    \
+                   /          \____\
+               ___/\       _  /    /
+              / \/  \     /_\/____/
+              \     /     \___\
+              /     \_/\  /   /
+             /          \/___/
+             \  _       /   /
+              \/_|     /___/
+                 /     \___\
+                 \  /\_/___/
+                  \/___/
+
+```
+
+> Credit to '[n4biS]' and https://ascii.co.uk/art/puzzle
