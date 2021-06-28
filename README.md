@@ -86,10 +86,11 @@ What patches are being applied and why:
 -------------------------------------------------------------------------------
 
 > With respect to the patches we included in our submission we followed
-upstream guidance and the Fedora April 2021 submission.  There are nine patches
-in total applied on top of the '15.4' tag, the first five have already been
-merged into other shim branches with the remaining four coming from PR #365,
-PR #378, and PR #381.  The commit descriptions for each patch are shown below:
+upstream guidance and the Fedora April 2021 submission.  All of the patches
+we applied to the base '15.4' tag are listed below; most of these patches have
+already been merged into the default shim branch, but some exist only in
+outstanding PRs.  The Dockerfile has more information on the patches and their
+origin.
 
 ```
 commit 16eeafe28c552bca36953d75581500887631a7f1
@@ -185,7 +186,77 @@ Date:   Sat Apr 10 16:05:23 2021 -0400
     EFI_RUNTIME_SERVICES table's major revision is less than two, and
     assumes our maximum variable size is 1024 in that case.
     
+    Signed-off-by: Peter Jones <pjones@redhat.com>    
+```
+
+```
+commit 05875f3aed1c90fe071c66de05744ca2bcbc2b9e
+Author: Peter Jones <pjones@redhat.com>
+Date:   Thu May 13 20:42:18 2021 -0400
+
+    Post-process our PE to be sure.
+    
+    On some versions of binutils[0], including binutils-2.23.52.0.1-55.el7,
+    do not correctly initialize the data when computing the PE optional
+    header checksum.  Unfortunately, this means that any time you get a
+    build that reproduces correctly using the version of objcopy from those
+    versions, it's just a matter of luck.
+    
+    This patch introduces a new utility program, post-process-pe, which does
+    some basic validation of the resulting binaries, and if necessary,
+    performs some minor repairs:
+    
+    - sets the timestamp to 0
+      - this was previously done with dd using constant offsets that aren't
+        really safe.
+    - re-computes the checksum.
+    
+    [0] I suspect, but have not yet fully verified, that this is
+        accidentally fixed by the following upstream binutils commit:
+    
+        commit cf7a3c01d82abdf110ef85ab770e5997d8ac28ac
+        Author: Alan Modra <amodra@gmail.com>
+        Date:   Tue Dec 15 22:09:30 2020 +1030
+    
+          Lose some COFF/PE static vars, and peicode.h constify
+    
+          This patch tidies some COFF and PE code that unnecessarily used static
+          variables to communicate between functions.
+    
+    v2 - MAP_PRIVATE was totally wrong...
+    
     Signed-off-by: Peter Jones <pjones@redhat.com>
+```
+
+```
+commit 9f973e4e95b1136b8c98051dbbdb1773072cc998
+Author: Gary Lin <glin@suse.com>
+Date:   Tue May 11 10:41:43 2021 +0800
+
+    Relax the check for import_mok_state()
+    
+    An openSUSE user reported(*) that shim 15.4 failed to boot the system
+    with the following message:
+    
+      "Could not create MokListXRT: Out of Resources"
+    
+    In the beginning, I thought it's caused by the growing size of
+    vendor-dbx. However, we found the following messages after set
+    SHIM_VERBOSE:
+    
+      max_var_sz:8000 remaining_sz:85EC max_storage_sz:9000
+      SetVariable(“MokListXRT”, ... varsz=0x1404) = Out of Resources
+    
+    Even though the firmware claimed the remaining storage size is 0x85EC
+    and the maximum variable size is 0x8000, it still rejected MokListXRT
+    with size 0x1404. It seems that the return values from QueryVariableInfo()
+    are not reliable. Since this firmware didn't really support Secure Boot,
+    the variable mirroring is not so critical, so we can just accept the
+    failure of import_mok_state() and continue boot.
+    
+    (*) https://bugzilla.suse.com/show_bug.cgi?id=1185261
+    
+    Signed-off-by: Gary Lin <glin@suse.com>
 ```
 
 ```
@@ -374,11 +445,11 @@ shim-git_commit_extra.log
 shimx64.efi
 vendor_db.esl
 % sha256sum *
-66146056bfe3252c56bc57717741ec76ebed96559754d5c71bd423429dd6aa6a  build.log
+70dc3beb4286d3340951dc9acdb35e181b62c0928db6f2d6a8cab1f015513114  build.log
 529fc0875c8977188e026243c4a21135f27ed3906c18c83fa7503deafb5255b0  fbx64.efi
 901996120d2b0203f34511cff88f583b561972a73ce6634d3ce24c46d62dfa80  mmx64.efi
-6f8c322cf782b2c495968d62b7f32c743b5590a76f639acb551e361550ec5213  shim-git_commit_extra.log
-52cb8d4b5c9bb4a8140210de75b3bb2c9d8d72fbd78ff7f895a18e72871cbb16  shimx64.efi
+4016498a09d68e0f9f98a792aeca3902e6cbffe4063445116656ee63b4947bf9  shim-git_commit_extra.log
+20a8950afd167faf959b98f946adcbb997d7cedebc7ce18b108757e4a2072e43  shimx64.efi
 0950f70d1dce96ac227a09f4885356df2527de75891b6ca5c703a0af800bbccb  vendor_db.esl
 ```
 

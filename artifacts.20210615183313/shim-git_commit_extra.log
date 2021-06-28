@@ -1,4 +1,4 @@
-commit 0602af0ae4687f854da6cbac86e59d6ec2a45d5d
+commit 96f01ef610446e5a68c83a6946cace03336ce75e
 Author: Paul Moore <pmoore2@cisco.com>
 Date:   Tue May 18 15:02:28 2021 -0400
 
@@ -10,7 +10,7 @@ Date:   Tue May 18 15:02:28 2021 -0400
     Signed-off-by: Paul Moore <pmoore2@cisco.com>
 
 diff --git a/shim.c b/shim.c
-index ebc0da7e..5c0c0d87 100644
+index 13f2d5bb..10302376 100644
 --- a/shim.c
 +++ b/shim.c
 @@ -1545,7 +1545,8 @@ EFI_STATUS set_second_stage (EFI_HANDLE image_handle)
@@ -72,7 +72,7 @@ index ebc0da7e..5c0c0d87 100644
  
  	/* cleanup if we create a duplicate li->LoadOptions */
 
-commit 066a66ab2f395f13b06947b34609ab0471fcd5ce
+commit df4993ca6cedb8cc98a60d17572f7981f8df76cb
 Author: Paul Moore <pmoore2@cisco.com>
 Date:   Tue May 18 11:55:27 2021 -0400
 
@@ -92,7 +92,7 @@ Date:   Tue May 18 11:55:27 2021 -0400
     Signed-off-by: Paul Moore <pmoore2@cisco.com>
 
 diff --git a/shim.c b/shim.c
-index c5cfbb83..ebc0da7e 100644
+index 40e48948..13f2d5bb 100644
 --- a/shim.c
 +++ b/shim.c
 @@ -1387,10 +1387,12 @@ EFI_STATUS set_second_stage (EFI_HANDLE image_handle)
@@ -212,7 +212,7 @@ index c5cfbb83..ebc0da7e 100644
  	}
  
 
-commit c61ff985baf79ebe8efdd7363e75268a0f3ae25b
+commit 492c941cd9d70137173b2aa3a104086cc68ac688
 Author: Seth Forshee <seth.forshee@canonical.com>
 Date:   Sat Jun 5 07:34:44 2021 -0500
 
@@ -267,7 +267,7 @@ index 278a8e78..daa2e0f4 100644
  
  void
 
-commit 8fe41600bba666f9c6b4456a97910ace637cfd1a
+commit bfd1e3fef27890d183f6afaf23e1235c25496b65
 Author: Jonathan Yong <jonathan.yong@intel.com>
 Date:   Fri Apr 16 09:59:03 2021 +0800
 
@@ -302,7 +302,688 @@ index beac0ff6..db18093d 100644
  	if (p) {
  		ZeroMem(&config_template, sizeof(config_template));
 
-commit f32ec3e58fe4684fe6509cd4b848200954be0a08
+commit 2f638945949a12c8d76a450bacc2bf3e13a8e4c0
+Author: Gary Lin <glin@suse.com>
+Date:   Tue May 11 10:41:43 2021 +0800
+
+    Relax the check for import_mok_state()
+    
+    An openSUSE user reported(*) that shim 15.4 failed to boot the system
+    with the following message:
+    
+      "Could not create MokListXRT: Out of Resources"
+    
+    In the beginning, I thought it's caused by the growing size of
+    vendor-dbx. However, we found the following messages after set
+    SHIM_VERBOSE:
+    
+      max_var_sz:8000 remaining_sz:85EC max_storage_sz:9000
+      SetVariable(“MokListXRT”, ... varsz=0x1404) = Out of Resources
+    
+    Even though the firmware claimed the remaining storage size is 0x85EC
+    and the maximum variable size is 0x8000, it still rejected MokListXRT
+    with size 0x1404. It seems that the return values from QueryVariableInfo()
+    are not reliable. Since this firmware didn't really support Secure Boot,
+    the variable mirroring is not so critical, so we can just accept the
+    failure of import_mok_state() and continue boot.
+    
+    (*) https://bugzilla.suse.com/show_bug.cgi?id=1185261
+    
+    Signed-off-by: Gary Lin <glin@suse.com>
+
+diff --git a/shim.c b/shim.c
+index c5cfbb83..40e48948 100644
+--- a/shim.c
++++ b/shim.c
+@@ -1973,10 +1973,13 @@ efi_main (EFI_HANDLE passed_image_handle, EFI_SYSTEM_TABLE *passed_systab)
+ 	 * boot-services-only state variables are what we think they are.
+ 	 */
+ 	efi_status = import_mok_state(image_handle);
+-	if (!secure_mode() && efi_status == EFI_INVALID_PARAMETER) {
++	if (!secure_mode() &&
++	    (efi_status == EFI_INVALID_PARAMETER ||
++	     efi_status == EFI_OUT_OF_RESOURCES)) {
+ 		/*
+ 		 * Make copy failures fatal only if secure_mode is enabled, or
+-		 * the error was anything else than EFI_INVALID_PARAMETER.
++		 * the error was anything else than EFI_INVALID_PARAMETER or
++		 * EFI_OUT_OF_RESOURCES.
+ 		 * There are non-secureboot firmware implementations that don't
+ 		 * reserve enough EFI variable memory to fit the variable.
+ 		 */
+
+commit d45295620d179b716ee7ef61b5cc83b2a0b81a89
+Author: Peter Jones <pjones@redhat.com>
+Date:   Thu May 13 20:42:18 2021 -0400
+
+    Post-process our PE to be sure.
+    
+    On some versions of binutils[0], including binutils-2.23.52.0.1-55.el7,
+    do not correctly initialize the data when computing the PE optional
+    header checksum.  Unfortunately, this means that any time you get a
+    build that reproduces correctly using the version of objcopy from those
+    versions, it's just a matter of luck.
+    
+    This patch introduces a new utility program, post-process-pe, which does
+    some basic validation of the resulting binaries, and if necessary,
+    performs some minor repairs:
+    
+    - sets the timestamp to 0
+      - this was previously done with dd using constant offsets that aren't
+        really safe.
+    - re-computes the checksum.
+    
+    [0] I suspect, but have not yet fully verified, that this is
+        accidentally fixed by the following upstream binutils commit:
+    
+        commit cf7a3c01d82abdf110ef85ab770e5997d8ac28ac
+        Author: Alan Modra <amodra@gmail.com>
+        Date:   Tue Dec 15 22:09:30 2020 +1030
+    
+          Lose some COFF/PE static vars, and peicode.h constify
+    
+          This patch tidies some COFF and PE code that unnecessarily used static
+          variables to communicate between functions.
+    
+    v2 - MAP_PRIVATE was totally wrong...
+    
+    Signed-off-by: Peter Jones <pjones@redhat.com>
+
+diff --git a/.gitignore b/.gitignore
+index 832c0cd7..d37fcd63 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -29,6 +29,7 @@ Make.local
+ /build*/
+ /certdb/
+ /cov-int/
++/post-process-pe
+ /random.bin
+ /sbat.*.csv
+ /scan-results/
+diff --git a/Make.defaults b/Make.defaults
+index a775083e..1b929a71 100644
+--- a/Make.defaults
++++ b/Make.defaults
+@@ -64,7 +64,6 @@ ifeq ($(ARCH),x86_64)
+ 	ARCH_SUFFIX		?= x64
+ 	ARCH_SUFFIX_UPPER	?= X64
+ 	ARCH_LDFLAGS		?=
+-	TIMESTAMP_LOCATION	:= 136
+ endif
+ ifeq ($(ARCH),ia32)
+ 	ARCH_CFLAGS		?= -mno-mmx -mno-sse -mno-red-zone -nostdinc \
+@@ -75,7 +74,6 @@ ifeq ($(ARCH),ia32)
+ 	ARCH_SUFFIX_UPPER	?= IA32
+ 	ARCH_LDFLAGS		?=
+ 	ARCH_CFLAGS		?= -m32
+-	TIMESTAMP_LOCATION	:= 136
+ endif
+ ifeq ($(ARCH),aarch64)
+ 	ARCH_CFLAGS		?= -DMDE_CPU_AARCH64 -DPAGE_SIZE=4096 -mstrict-align
+@@ -86,7 +84,6 @@ ifeq ($(ARCH),aarch64)
+ 	SUBSYSTEM		:= 0xa
+ 	ARCH_LDFLAGS		+= --defsym=EFI_SUBSYSTEM=$(SUBSYSTEM)
+ 	ARCH_CFLAGS		?=
+-	TIMESTAMP_LOCATION	:= 72
+ endif
+ ifeq ($(ARCH),arm)
+ 	ARCH_CFLAGS		?= -DMDE_CPU_ARM -DPAGE_SIZE=4096 -mno-unaligned-access
+@@ -96,7 +93,6 @@ ifeq ($(ARCH),arm)
+ 	FORMAT			:= -O binary
+ 	SUBSYSTEM		:= 0xa
+ 	ARCH_LDFLAGS		+= --defsym=EFI_SUBSYSTEM=$(SUBSYSTEM)
+-	TIMESTAMP_LOCATION	:= 72
+ endif
+ 
+ DEFINES		= -DDEFAULT_LOADER='L"$(DEFAULT_LOADER)"' \
+diff --git a/Makefile b/Makefile
+index 8c66459c..d80aea82 100644
+--- a/Makefile
++++ b/Makefile
+@@ -121,9 +121,10 @@ sbat_data.o : /dev/null
+ 		$@
+ 	$(foreach vs,$(VENDOR_SBATS),$(call add-vendor-sbat,$(vs),$@))
+ 
+-$(SHIMNAME) : $(SHIMSONAME)
+-$(MMNAME) : $(MMSONAME)
+-$(FBNAME) : $(FBSONAME)
++$(SHIMNAME) : $(SHIMSONAME) post-process-pe
++$(MMNAME) : $(MMSONAME) post-process-pe
++$(FBNAME) : $(FBSONAME) post-process-pe
++$(SHIMNAME) $(MMNAME) $(FBNAME) : | post-process-pe
+ 
+ LIBS = Cryptlib/libcryptlib.a \
+        Cryptlib/OpenSSL/libopenssl.a \
+@@ -164,6 +165,9 @@ lib/lib.a: | $(TOPDIR)/lib/Makefile $(wildcard $(TOPDIR)/include/*.[ch])
+ 	mkdir -p lib
+ 	$(MAKE) VPATH=$(TOPDIR)/lib TOPDIR=$(TOPDIR) -C lib -f $(TOPDIR)/lib/Makefile
+ 
++post-process-pe : $(TOPDIR)/post-process-pe.c
++	$(HOSTCC) -std=gnu11 -Og -g3 -Wall -Wextra -Wno-missing-field-initializers -Werror -o $@ $<
++
+ buildid : $(TOPDIR)/buildid.c
+ 	$(HOSTCC) -I/usr/include -Og -g3 -Wall -Werror -Wextra -o $@ $< -lelf
+ 
+@@ -246,8 +250,7 @@ endif
+ 		-j .rela* -j .reloc -j .eh_frame \
+ 		-j .vendor_cert -j .sbat \
+ 		$(FORMAT) $< $@
+-	# I am tired of wasting my time fighting binutils timestamp code.
+-	dd conv=notrunc bs=1 count=4 seek=$(TIMESTAMP_LOCATION) if=/dev/zero of=$@
++	./post-process-pe -vv $@
+ 
+ ifneq ($(origin ENABLE_SHIM_HASH),undefined)
+ %.hash : %.efi
+diff --git a/post-process-pe.c b/post-process-pe.c
+new file mode 100644
+index 00000000..8414a5fa
+--- /dev/null
++++ b/post-process-pe.c
+@@ -0,0 +1,501 @@
++// SPDX-License-Identifier: BSD-2-Clause-Patent
++/*
++ * post-process-pe.c - fix up timestamps and checksums in broken PE files
++ * Copyright Peter Jones <pjones@redhat.com>
++ */
++
++#define _GNU_SOURCE 1
++
++#include <err.h>
++#include <fcntl.h>
++#include <getopt.h>
++#include <inttypes.h>
++#include <limits.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/mman.h>
++#include <sys/param.h>
++#include <sys/stat.h>
++#include <sys/types.h>
++#include <unistd.h>
++
++#ifndef PAGE_SIZE
++#define PAGE_SIZE 4096
++#endif
++
++static int verbosity;
++#define ERROR         0
++#define WARNING       1
++#define INFO          2
++#define NOISE         3
++#define MIN_VERBOSITY ERROR
++#define MAX_VERBOSITY NOISE
++#define debug(level, ...)                                        \
++	({                                                       \
++		if (verbosity >= (level)) {                      \
++			printf("%s():%d: ", __func__, __LINE__); \
++			printf(__VA_ARGS__);                     \
++		}                                                \
++		0;                                               \
++	})
++
++typedef uint8_t UINT8;
++typedef uint16_t UINT16;
++typedef uint32_t UINT32;
++typedef uint64_t UINT64;
++
++typedef uint16_t CHAR16;
++
++typedef unsigned long UINTN;
++
++typedef struct {
++	UINT32 Data1;
++	UINT16 Data2;
++	UINT16 Data3;
++	UINT8 Data4[8];
++} EFI_GUID;
++
++#include "include/peimage.h"
++
++#if defined(__GNUC__) && defined(__GNUC_MINOR__)
++#define GNUC_PREREQ(maj, min) \
++	((__GNUC__ << 16) + __GNUC_MINOR__ >= ((maj) << 16) + (min))
++#else
++#define GNUC_PREREQ(maj, min) 0
++#endif
++
++#if defined(__clang__) && defined(__clang_major__) && defined(__clang_minor__)
++#define CLANG_PREREQ(maj, min)        \
++	((__clang_major__ > (maj)) || \
++	 (__clang_major__ == (maj) && __clang_minor__ >= (min)))
++#else
++#define CLANG_PREREQ(maj, min) 0
++#endif
++
++#if GNUC_PREREQ(5, 1) || CLANG_PREREQ(3, 8)
++#define add(a0, a1, s) __builtin_add_overflow(a0, a1, s)
++#define sub(s0, s1, d) __builtin_sub_overflow(s0, s1, d)
++#define mul(f0, f1, p) __builtin_mul_overflow(f0, f1, p)
++#else
++#define add(a0, a1, s)                \
++	({                            \
++		(*s) = ((a0) + (a1)); \
++		0;                    \
++	})
++#define sub(s0, s1, d)                \
++	({                            \
++		(*d) = ((s0) - (s1)); \
++		0;                    \
++	})
++#define mul(f0, f1, p)                \
++	({                            \
++		(*p) = ((f0) * (f1)); \
++		0;                    \
++	})
++#endif
++#define div(d0, d1, q)                           \
++	({                                       \
++		unsigned int ret_ = ((d1) == 0); \
++		if (ret_ == 0)                   \
++			(*q) = ((d0) / (d1));    \
++		ret_;                            \
++	})
++
++static int
++image_is_64_bit(EFI_IMAGE_OPTIONAL_HEADER_UNION *PEHdr)
++{
++	/* .Magic is the same offset in all cases */
++	if (PEHdr->Pe32Plus.OptionalHeader.Magic ==
++	    EFI_IMAGE_NT_OPTIONAL_HDR64_MAGIC)
++		return 1;
++	return 0;
++}
++
++static void
++load_pe(const char *const file, void *const data, const size_t datasize,
++        PE_COFF_LOADER_IMAGE_CONTEXT *ctx)
++{
++	EFI_IMAGE_DOS_HEADER *DOSHdr = data;
++	EFI_IMAGE_OPTIONAL_HEADER_UNION *PEHdr = data;
++	size_t HeaderWithoutDataDir, SectionHeaderOffset, OptHeaderSize;
++	size_t FileAlignment = 0;
++	size_t sz0 = 0, sz1 = 0;
++	uintptr_t loc = 0;
++
++	debug(NOISE, "datasize:%zu sizeof(PEHdr->Pe32):%zu\n", datasize,
++	      sizeof(PEHdr->Pe32));
++	if (datasize < sizeof(PEHdr->Pe32))
++		errx(1, "%s: Invalid image size %zu (%zu < %zu)", file,
++		     datasize, datasize, sizeof(PEHdr->Pe32));
++
++	debug(NOISE,
++	      "DOSHdr->e_magic:0x%02hx EFI_IMAGE_DOS_SIGNATURE:0x%02hx\n",
++	      DOSHdr->e_magic, EFI_IMAGE_DOS_SIGNATURE);
++	if (DOSHdr->e_magic != EFI_IMAGE_DOS_SIGNATURE)
++		errx(1,
++		     "%s: Invalid DOS header signature 0x%04hx (expected 0x%04hx)",
++		     file, DOSHdr->e_magic, EFI_IMAGE_DOS_SIGNATURE);
++
++	debug(NOISE, "DOSHdr->e_lfanew:%u datasize:%zu\n", DOSHdr->e_lfanew,
++	      datasize);
++	if (DOSHdr->e_lfanew >= datasize ||
++	    add((uintptr_t)data, DOSHdr->e_lfanew, &loc))
++		errx(1, "%s: invalid pe header location", file);
++
++	ctx->PEHdr = PEHdr = (EFI_IMAGE_OPTIONAL_HEADER_UNION *)loc;
++	debug(NOISE, "PE signature:0x%04x EFI_IMAGE_NT_SIGNATURE:0x%04x\n",
++	      PEHdr->Pe32.Signature, EFI_IMAGE_NT_SIGNATURE);
++	if (PEHdr->Pe32.Signature != EFI_IMAGE_NT_SIGNATURE)
++		errx(1, "%s: Unsupported image type", file);
++
++	if (image_is_64_bit(PEHdr)) {
++		debug(NOISE, "image is 64bit\n");
++		ctx->NumberOfRvaAndSizes =
++			PEHdr->Pe32Plus.OptionalHeader.NumberOfRvaAndSizes;
++		ctx->SizeOfHeaders =
++			PEHdr->Pe32Plus.OptionalHeader.SizeOfHeaders;
++		ctx->ImageSize = PEHdr->Pe32Plus.OptionalHeader.SizeOfImage;
++		ctx->SectionAlignment =
++			PEHdr->Pe32Plus.OptionalHeader.SectionAlignment;
++		FileAlignment = PEHdr->Pe32Plus.OptionalHeader.FileAlignment;
++		OptHeaderSize = sizeof(EFI_IMAGE_OPTIONAL_HEADER64);
++	} else {
++		debug(NOISE, "image is 32bit\n");
++		ctx->NumberOfRvaAndSizes =
++			PEHdr->Pe32.OptionalHeader.NumberOfRvaAndSizes;
++		ctx->SizeOfHeaders = PEHdr->Pe32.OptionalHeader.SizeOfHeaders;
++		ctx->ImageSize = (UINT64)PEHdr->Pe32.OptionalHeader.SizeOfImage;
++		ctx->SectionAlignment =
++			PEHdr->Pe32.OptionalHeader.SectionAlignment;
++		FileAlignment = PEHdr->Pe32.OptionalHeader.FileAlignment;
++		OptHeaderSize = sizeof(EFI_IMAGE_OPTIONAL_HEADER32);
++	}
++
++	if (FileAlignment % 2 != 0)
++		errx(1, "%s: Invalid file alignment %ld", file, FileAlignment);
++
++	if (FileAlignment == 0)
++		FileAlignment = 0x200;
++	if (ctx->SectionAlignment == 0)
++		ctx->SectionAlignment = PAGE_SIZE;
++	if (ctx->SectionAlignment < FileAlignment)
++		ctx->SectionAlignment = FileAlignment;
++
++	ctx->NumberOfSections = PEHdr->Pe32.FileHeader.NumberOfSections;
++
++	debug(NOISE,
++	      "Number of RVAs:%"PRIu64" EFI_IMAGE_NUMBER_OF_DIRECTORY_ENTRIES:%d\n",
++	      ctx->NumberOfRvaAndSizes, EFI_IMAGE_NUMBER_OF_DIRECTORY_ENTRIES);
++	if (EFI_IMAGE_NUMBER_OF_DIRECTORY_ENTRIES < ctx->NumberOfRvaAndSizes)
++		errx(1, "%s: invalid number of RVAs (%lu entries, max is %d)",
++		     file, ctx->NumberOfRvaAndSizes,
++		     EFI_IMAGE_NUMBER_OF_DIRECTORY_ENTRIES);
++
++	if (mul(sizeof(EFI_IMAGE_DATA_DIRECTORY),
++	        EFI_IMAGE_NUMBER_OF_DIRECTORY_ENTRIES, &sz0) ||
++	    sub(OptHeaderSize, sz0, &HeaderWithoutDataDir) ||
++	    sub(PEHdr->Pe32.FileHeader.SizeOfOptionalHeader,
++	        HeaderWithoutDataDir, &sz0) ||
++	    mul(ctx->NumberOfRvaAndSizes, sizeof(EFI_IMAGE_DATA_DIRECTORY),
++	        &sz1) ||
++	    (sz0 != sz1)) {
++		if (mul(sizeof(EFI_IMAGE_DATA_DIRECTORY),
++		        EFI_IMAGE_NUMBER_OF_DIRECTORY_ENTRIES, &sz0))
++			debug(ERROR,
++			      "sizeof(EFI_IMAGE_DATA_DIRECTORY) * EFI_IMAGE_NUMBER_OF_DIRECTORY_ENTRIES overflows\n");
++		else
++			debug(ERROR,
++			      "sizeof(EFI_IMAGE_DATA_DIRECTORY) * EFI_IMAGE_NUMBER_OF_DIRECTORY_ENTRIES = %zu\n",
++			      sz0);
++		if (sub(OptHeaderSize, sz0, &HeaderWithoutDataDir))
++			debug(ERROR,
++			      "OptHeaderSize (%zu) - HeaderWithoutDataDir (%zu) overflows\n",
++			      OptHeaderSize, HeaderWithoutDataDir);
++		else
++			debug(ERROR,
++			      "OptHeaderSize (%zu) - HeaderWithoutDataDir (%zu) = %zu\n",
++			      OptHeaderSize, sz0, HeaderWithoutDataDir);
++
++		if (sub(PEHdr->Pe32.FileHeader.SizeOfOptionalHeader,
++		        HeaderWithoutDataDir, &sz0)) {
++			debug(ERROR,
++			      "PEHdr->Pe32.FileHeader.SizeOfOptionalHeader (%d) - %zu overflows\n",
++			      PEHdr->Pe32.FileHeader.SizeOfOptionalHeader,
++			      HeaderWithoutDataDir);
++		} else {
++			debug(ERROR,
++			      "PEHdr->Pe32.FileHeader.SizeOfOptionalHeader (%d)- %zu = %zu\n",
++			      PEHdr->Pe32.FileHeader.SizeOfOptionalHeader,
++			      HeaderWithoutDataDir, sz0);
++		}
++		if (mul(ctx->NumberOfRvaAndSizes,
++		        sizeof(EFI_IMAGE_DATA_DIRECTORY), &sz1))
++			debug(ERROR,
++			      "ctx->NumberOfRvaAndSizes (%zu) * sizeof(EFI_IMAGE_DATA_DIRECTORY) overflows\n",
++			      ctx->NumberOfRvaAndSizes);
++		else
++			debug(ERROR,
++			      "ctx->NumberOfRvaAndSizes (%zu) * sizeof(EFI_IMAGE_DATA_DIRECTORY) = %zu\n",
++			      ctx->NumberOfRvaAndSizes, sz1);
++		debug(ERROR,
++		      "space after image header:%zu data directory size:%zu\n",
++		      sz0, sz1);
++
++		errx(1, "%s: image header overflows data directory", file);
++	}
++
++	if (add(DOSHdr->e_lfanew, sizeof(UINT32), &SectionHeaderOffset) ||
++	    add(SectionHeaderOffset, sizeof(EFI_IMAGE_FILE_HEADER),
++	        &SectionHeaderOffset) ||
++	    add(SectionHeaderOffset,
++	        PEHdr->Pe32.FileHeader.SizeOfOptionalHeader,
++	        &SectionHeaderOffset)) {
++		debug(ERROR, "SectionHeaderOffset:%" PRIu32 " + %zu + %zu + %d",
++		      DOSHdr->e_lfanew, sizeof(UINT32),
++		      sizeof(EFI_IMAGE_FILE_HEADER),
++		      PEHdr->Pe32.FileHeader.SizeOfOptionalHeader);
++		errx(1, "%s: SectionHeaderOffset would overflow", file);
++	}
++
++	if (sub(ctx->ImageSize, SectionHeaderOffset, &sz0) ||
++	    div(sz0, EFI_IMAGE_SIZEOF_SECTION_HEADER, &sz0) ||
++	    (sz0 <= ctx->NumberOfSections)) {
++		debug(ERROR, "(%" PRIu64 " - %zu) / %d > %d\n", ctx->ImageSize,
++		      SectionHeaderOffset, EFI_IMAGE_SIZEOF_SECTION_HEADER,
++		      ctx->NumberOfSections);
++		errx(1, "%s: image sections overflow image size", file);
++	}
++
++	if (sub(ctx->SizeOfHeaders, SectionHeaderOffset, &sz0) ||
++	    div(sz0, EFI_IMAGE_SIZEOF_SECTION_HEADER, &sz0) ||
++	    (sz0 < ctx->NumberOfSections)) {
++		debug(ERROR, "(%zu - %zu) / %d >= %d\n", ctx->SizeOfHeaders,
++		      SectionHeaderOffset, EFI_IMAGE_SIZEOF_SECTION_HEADER,
++		      ctx->NumberOfSections);
++		errx(1, "%s: image sections overflow section headers", file);
++	}
++
++	if (sub((uintptr_t)PEHdr, (uintptr_t)data, &sz0) ||
++	    add(sz0, sizeof(EFI_IMAGE_OPTIONAL_HEADER_UNION), &sz0) ||
++	    (sz0 > datasize)) {
++		errx(1, "%s: PE Image size %zu > %zu", file, sz0, datasize);
++	}
++
++	if (PEHdr->Pe32.FileHeader.Characteristics & EFI_IMAGE_FILE_RELOCS_STRIPPED)
++		errx(1, "%s: Unsupported image - Relocations have been stripped", file);
++
++	if (image_is_64_bit(PEHdr)) {
++		ctx->ImageAddress = PEHdr->Pe32Plus.OptionalHeader.ImageBase;
++		ctx->EntryPoint =
++			PEHdr->Pe32Plus.OptionalHeader.AddressOfEntryPoint;
++		ctx->RelocDir = &PEHdr->Pe32Plus.OptionalHeader.DataDirectory
++		                         [EFI_IMAGE_DIRECTORY_ENTRY_BASERELOC];
++		ctx->SecDir = &PEHdr->Pe32Plus.OptionalHeader.DataDirectory
++		                       [EFI_IMAGE_DIRECTORY_ENTRY_SECURITY];
++	} else {
++		ctx->ImageAddress = PEHdr->Pe32.OptionalHeader.ImageBase;
++		ctx->EntryPoint =
++			PEHdr->Pe32.OptionalHeader.AddressOfEntryPoint;
++		ctx->RelocDir = &PEHdr->Pe32.OptionalHeader.DataDirectory
++		                         [EFI_IMAGE_DIRECTORY_ENTRY_BASERELOC];
++		ctx->SecDir = &PEHdr->Pe32.OptionalHeader.DataDirectory
++		                       [EFI_IMAGE_DIRECTORY_ENTRY_SECURITY];
++	}
++
++	if (add((uintptr_t)PEHdr, PEHdr->Pe32.FileHeader.SizeOfOptionalHeader,
++	        &loc) ||
++	    add(loc, sizeof(UINT32), &loc) ||
++	    add(loc, sizeof(EFI_IMAGE_FILE_HEADER), &loc))
++		errx(1, "%s: invalid location for first section", file);
++
++	ctx->FirstSection = (EFI_IMAGE_SECTION_HEADER *)loc;
++
++	if (ctx->ImageSize < ctx->SizeOfHeaders)
++		errx(1,
++		     "%s: Image size %"PRIu64" is smaller than header size %lu",
++		     file, ctx->ImageSize, ctx->SizeOfHeaders);
++
++	if (sub((uintptr_t)ctx->SecDir, (uintptr_t)data, &sz0) ||
++	    sub(datasize, sizeof(EFI_IMAGE_DATA_DIRECTORY), &sz1) ||
++	    sz0 > sz1)
++		errx(1,
++		     "%s: security direcory offset %zu past data directory at %zu",
++		     file, sz0, sz1);
++
++	if (ctx->SecDir->VirtualAddress > datasize ||
++	    (ctx->SecDir->VirtualAddress == datasize &&
++	     ctx->SecDir->Size > 0))
++		errx(1, "%s: Security directory extends past end", file);
++}
++
++static void
++fix_timestamp(PE_COFF_LOADER_IMAGE_CONTEXT *ctx)
++{
++	uint32_t ts;
++
++	if (image_is_64_bit(ctx->PEHdr)) {
++		ts = ctx->PEHdr->Pe32Plus.FileHeader.TimeDateStamp;
++	} else {
++		ts = ctx->PEHdr->Pe32.FileHeader.TimeDateStamp;
++	}
++
++	if (ts != 0) {
++		debug(INFO, "Updating timestamp from 0x%08x to 0\n", ts);
++		if (image_is_64_bit(ctx->PEHdr)) {
++			ctx->PEHdr->Pe32Plus.FileHeader.TimeDateStamp = 0;
++		} else {
++			ctx->PEHdr->Pe32.FileHeader.TimeDateStamp = 0;
++		}
++	}
++}
++
++static void
++fix_checksum(PE_COFF_LOADER_IMAGE_CONTEXT *ctx, void *map, size_t mapsize)
++{
++	uint32_t old;
++	uint32_t checksum = 0;
++	uint16_t word;
++	uint8_t *data = map;
++
++	if (image_is_64_bit(ctx->PEHdr)) {
++		old = ctx->PEHdr->Pe32Plus.OptionalHeader.CheckSum;
++		ctx->PEHdr->Pe32Plus.OptionalHeader.CheckSum = 0;
++	} else {
++		old = ctx->PEHdr->Pe32.OptionalHeader.CheckSum;
++		ctx->PEHdr->Pe32.OptionalHeader.CheckSum = 0;
++	}
++	debug(NOISE, "old checksum was 0x%08x\n", old);
++
++	for (size_t i = 0; i < mapsize - 1; i += 2) {
++		word = (data[i + 1] << 8ul) | data[i];
++		checksum += word;
++		checksum = 0xffff & (checksum + (checksum >> 0x10));
++	}
++	debug(NOISE, "checksum = 0x%08x + 0x%08zx = 0x%08zx\n", checksum,
++	      mapsize, checksum + mapsize);
++
++	checksum += mapsize;
++
++	if (checksum != old)
++		debug(INFO, "Updating checksum from 0x%08x to 0x%08x\n",
++		      old, checksum);
++
++	if (image_is_64_bit(ctx->PEHdr)) {
++		ctx->PEHdr->Pe32Plus.OptionalHeader.CheckSum = checksum;
++	} else {
++		ctx->PEHdr->Pe32.OptionalHeader.CheckSum = checksum;
++	}
++}
++
++static void
++handle_one(char *f)
++{
++	int fd;
++	int rc;
++	struct stat statbuf;
++	size_t sz;
++	void *map;
++	int failed = 0;
++
++	PE_COFF_LOADER_IMAGE_CONTEXT ctx = { 0, 0 };
++
++	fd = open(f, O_RDWR | O_EXCL);
++	if (fd < 0)
++		err(1, "Could not open \"%s\"", f);
++
++	rc = fstat(fd, &statbuf);
++	if (rc < 0)
++		err(1, "Could not stat \"%s\"", f);
++
++	sz = statbuf.st_size;
++
++	map = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
++	if (map == MAP_FAILED)
++		err(1, "Could not map \"%s\"", f);
++
++	load_pe(f, map, sz, &ctx);
++
++	fix_timestamp(&ctx);
++
++	fix_checksum(&ctx, map, sz);
++
++	rc = msync(map, sz, MS_SYNC);
++	if (rc < 0) {
++		warn("msync(%p, %zu, MS_SYNC) failed", map, sz);
++		failed = 1;
++	}
++	munmap(map, sz);
++	if (rc < 0) {
++		warn("munmap(%p, %zu) failed", map, sz);
++		failed = 1;
++	}
++	rc = close(fd);
++	if (rc < 0) {
++		warn("close(%d) failed", fd);
++		failed = 1;
++	}
++	if (failed)
++		exit(1);
++}
++
++static void __attribute__((__noreturn__)) usage(int status)
++{
++	FILE *out = status ? stderr : stdout;
++
++	fprintf(out,
++	        "Usage: post-process-pe [OPTIONS] file0 [file1 [.. fileN]]\n");
++	fprintf(out, "Options:\n");
++	fprintf(out, "       -q    Be more quiet\n");
++	fprintf(out, "       -v    Be more verbose\n");
++	fprintf(out, "       -h    Print this help text and exit\n");
++
++	exit(status);
++}
++
++int main(int argc, char **argv)
++{
++	int i;
++	struct option options[] = {
++		{.name = "help",
++		 .val = '?',
++		 },
++		{.name = "usage",
++		 .val = '?',
++		 },
++		{.name = "quiet",
++		 .val = 'q',
++		},
++		{.name = "verbose",
++		 .val = 'v',
++		},
++		{.name = ""}
++	};
++	int longindex = -1;
++
++	while ((i = getopt_long(argc, argv, "hqsv", options, &longindex)) != -1) {
++		switch (i) {
++		case 'h':
++		case '?':
++			usage(longindex == -1 ? 1 : 0);
++			break;
++		case 'q':
++			verbosity = MAX(verbosity - 1, MIN_VERBOSITY);
++			break;
++		case 'v':
++			verbosity = MIN(verbosity + 1, MAX_VERBOSITY);
++			break;
++		}
++	}
++
++	if (optind == argc)
++		usage(1);
++
++	for (i = optind; i < argc; i++)
++		handle_one(argv[i]);
++
++	return 0;
++}
++
++// vim:fenc=utf-8:tw=75:noet
+
+commit 283e4f1fde63c3fe48983bc17e771f3589b474da
 Author: Peter Jones <pjones@redhat.com>
 Date:   Sat Apr 10 16:05:23 2021 -0400
 
@@ -360,7 +1041,7 @@ index 9b8fc2bc..beac0ff6 100644
  
  	/*
 
-commit bb3ac677301d40b02327de6281167b4497320a08
+commit e2a8c7ddfd0e4d0002081131f7c82835ea151bb6
 Author: Gary Lin <glin@suse.com>
 Date:   Thu Apr 8 16:23:03 2021 +0800
 
@@ -395,7 +1076,7 @@ index 9e37d6ab..9b8fc2bc 100644
  						(EFI_PHYSICAL_ADDRESS *)&config_table);
  		if (EFI_ERROR(efi_status) || !config_table) {
 
-commit 8193bb5ca83a8c2a4a30c5937761e62994220f94
+commit 59ac5a6aec36849217789f4fcc712f2af685ae5d
 Author: Peter Jones <pjones@redhat.com>
 Date:   Wed Mar 31 14:54:52 2021 -0400
 
@@ -423,7 +1104,7 @@ index 742e0a47..497a3a15 100644
    {
     *(.reloc)
 
-commit d55ff2166f3252490068713cca7e2d1efeabce38
+commit 90828c638ec19b6ed5544e44fc3199a1f4d372c9
 Author: Adam Williamson <awilliam@redhat.com>
 Date:   Thu Apr 8 22:39:02 2021 -0700
 
@@ -460,7 +1141,7 @@ index 5ad9072b..9e37d6ab 100644
  	BOOLEAN delete = FALSE;
  
 
-commit 6f6f5252462a7e24c05a148e895bbe2b7c14d7fd
+commit c5bce56340ce6ac7c8220b1a2ce6398734682203
 Author: Peter Jones <pjones@redhat.com>
 Date:   Wed Mar 31 09:44:53 2021 -0400
 

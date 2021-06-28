@@ -30,12 +30,12 @@ build: Dockerfile
 #@ clean:                       clean the docker images
 .PHONY: clean
 clean:
-	docker rmi shim
+	-docker rmi shim
 
 #@ clean-artifacts:             clean all build artifacts
 .PHONY: clean-artifacts
 clean-artifacts:
-	rm -rf artifacts.*
+	-rm -rf artifacts.*
 
 #@ clean-unsafe:                clean the docker images and all build artifacts
 .PHONY: clean-unsafe
