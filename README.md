@@ -42,22 +42,22 @@ bootloader signed by Microsoft.
 -------------------------------------------------------------------------------
 Who is the primary contact for security updates, etc.
 -------------------------------------------------------------------------------
-> - Name: Paul Moore
-> - Position: Engineering Technical Leader, Cisco
-> - Email address: pmoore2@cisco.com, paul@paul-moore.com
-> - PGP key, signed by the other security contacts, and preferably also with
-  signatures that are reasonably well known in the Linux community:
-> 7100AADFAE6E6E940D2E0AD655E45A5AE8CA7C8A
-
--------------------------------------------------------------------------------
-Who is the secondary contact for security updates, etc.
--------------------------------------------------------------------------------
 > - Name: Serge Hallyn
 > - Position: Principal Engineer, Cisco
 > - Email address: shallyn@cisco.com, sergeh@kernel.org
 > - PGP key, signed by the other security contacts, and preferably also with
   signatures that are reasonably well known in the Linux community:
 > 66D0387DB85D320F8408166DB175CFA98F192AF2
+
+-------------------------------------------------------------------------------
+Who is the secondary contact for security updates, etc.
+-------------------------------------------------------------------------------
+> - Name: Tycho Andersen
+> - Position: Engineering Technical Leader, Cisco
+> - Email address: tycander@cisco.com, tycho@tycho.pizza
+> - PGP key, signed by the other security contacts, and preferably also with
+  signatures that are reasonably well known in the Linux community:
+> 3CCAB226289DE0160C61BDB418D18F1BC464DCA3
 
 -------------------------------------------------------------------------------
 Please create your shim binaries starting with the 15.4 shim release tar file:
