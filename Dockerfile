@@ -7,7 +7,7 @@ RUN dnf builddep -y shim-unsigned-x64
 # setup our git environment
 ARG GIT_COMMITTER_DATE="Tue, 29 Jun 2021 00:00:00 +0000"
 RUN git config --global user.name "Shim Builder" && \
-	git config --global user.email "guest@guest.org"
+	git config --global user.email "guest@example.com"
 
 # clone the git repo
 RUN git clone https://github.com/rhboot/shim shim
@@ -36,19 +36,9 @@ RUN cd shim; git cherry-pick 4068fd42c891ea6ebdec056f461babc6e4048844
 RUN cd shim; git cherry-pick 493bd940e5c6e28e673034687de7adef9529efff
 RUN cd shim; git cherry-pick 05875f3aed1c90fe071c66de05744ca2bcbc2b9e
 RUN cd shim; git cherry-pick 9f973e4e95b1136b8c98051dbbdb1773072cc998
-# -> https://github.com/rhboot/shim/pull/365
-RUN cd shim; \
-	git remote add -f pr365 https://github.com/jyong2/shim && \
-	git cherry-pick 764021ad8e01f5f5122612059ba5d8ab10ff6a3b
-# -> https://github.com/rhboot/shim/pull/378
-RUN cd shim; \
-	git remote add -f pr378 https://github.com/sforshee/shim && \
-	git cherry-pick c5928d5ca0ab29809540f930149702717a942a7d
-# -> https://github.com/rhboot/shim/pull/381
-RUN cd shim; \
-	git remote add -f pr381 https://github.com/pcmoore/misc-rhboot_shim && \
-	git cherry-pick cc95420a48bfab3c0535580a91ebe3dc35255dd1 && \
-	git cherry-pick fed27210d1203e8fee150aeaf05662724af1e7a4
+RUN cd shim; git cherry-pick 4d64389c6c941d21548b06423b8131c872e3c3c7
+RUN cd shim; git cherry-pick 7501b6bb449f6e4d13e700a65650f9308f54c8c1
+RUN cd shim; git cherry-pick 4583db41ea58195956d4cdf97c43a195939f906b
 
 # generate the vendor_db.esl file from certs
 RUN cd shim/certs; \
