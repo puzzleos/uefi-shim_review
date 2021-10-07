@@ -2,6 +2,8 @@
 # UEFI shim build/review makefile
 #
 
+SHELL=/bin/bash
+
 .PHONY: all
 all: help
 
@@ -16,7 +18,7 @@ help:
 #@ build:                       build the uefi shim bootloader using docker
 .PHONY: build
 build: Dockerfile
-	ts=`date "+%Y%m%d%k%M%S"`; \
+	ts=`date "+%Y%m%d%H%M%S"`; \
 	d=artifacts.$$ts; \
 	mkdir $$d && \
 	docker build -t shim . |& tee $$d/build.log && \
