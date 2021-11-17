@@ -40,6 +40,18 @@ bootloader signed by Microsoft.
 -------------------------------------------------------------------------------
 Who is the primary contact for security updates, etc.
 -------------------------------------------------------------------------------
+> Name: Joy Latten
+> Position: Software Engineer, Cisco
+> Email address: jlatten@cisco.com, j_latten@yahoo.com
+> PGP key, signed by the other security contacts, and preferably also with
+  signatures that are reasonably well known in the Linux community:
+> 69F6FB67EC498FD5DA65C7D406B1CD452D3AE896
+
+-------------------------------------------------------------------------------
+Who is the secondary contact for security updates, etc.
+-------------------------------------------------------------------------------
+Two secondary contacts:
+
 > Name: Serge Hallyn
 > Position: Principal Engineer, Cisco
 > Email address: shallyn@cisco.com, sergeh@kernel.org
@@ -47,9 +59,6 @@ Who is the primary contact for security updates, etc.
   signatures that are reasonably well known in the Linux community:
 > 66D0387DB85D320F8408166DB175CFA98F192AF2
 
--------------------------------------------------------------------------------
-Who is the secondary contact for security updates, etc.
--------------------------------------------------------------------------------
 > - Name: Tycho Andersen
 > - Position: Engineering Technical Leader, Cisco
 > - Email address: tycander@cisco.com, tycho@tycho.pizza
